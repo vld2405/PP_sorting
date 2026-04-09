@@ -77,9 +77,15 @@
     </CudaCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <CudaCompile Include="BitonicSort.cu" />
     <CudaCompile Include="main.cu" />
+    <CudaCompile Include="MergeSort.cu" />
+    <CudaCompile Include="OddEvenSort.cu" />
+    <CudaCompile Include="RankingSort.cu" />
+    <CudaCompile Include="ShellSort.cu" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Sortings.h" />
     <ClInclude Include="Utils.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
