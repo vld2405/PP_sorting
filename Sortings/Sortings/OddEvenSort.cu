@@ -10,7 +10,7 @@
 
 #define THREADS_PER_BLOCK 256
 
-// --- HOST ---
+
 double runOddEvenSortHost(int* arr, int N) {
     auto start = std::chrono::high_resolution_clock::now();
     bool isSorted = false;
@@ -27,7 +27,7 @@ double runOddEvenSortHost(int* arr, int N) {
     return std::chrono::duration<double>(end - start).count();
 }
 
-// --- GLOBAL ---
+
 __global__ void odd_even_sort_kernel(int* arr, int n, int phase) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     int idx = 2 * i + phase;
@@ -39,6 +39,7 @@ __global__ void odd_even_sort_kernel(int* arr, int n, int phase) {
         }
     }
 }
+
 
 double runOddEvenSortGlobal(int* h_arr, int N) {
     int* d_arr;
@@ -62,7 +63,7 @@ double runOddEvenSortGlobal(int* h_arr, int N) {
     return std::chrono::duration<double>(end - start).count();
 }
 
-// --- SHARED ---
+
 __global__ void odd_even_shared(int* arr, int n) {
     extern __shared__ int s_data[];
     int tid = threadIdx.x;
@@ -89,6 +90,7 @@ __global__ void odd_even_shared(int* arr, int n) {
     if (gid < n) arr[gid] = s_data[tid];
 }
 
+
 double runOddEvenSortShared(int* h_arr, int N) {
     int* d_arr;
     size_t size = N * sizeof(int);
@@ -101,11 +103,9 @@ double runOddEvenSortShared(int* h_arr, int N) {
 
     auto start = std::chrono::high_resolution_clock::now();
 
-    // 1. Sortare locală masivă în Shared Memory
     odd_even_shared << <blocks_shared, THREADS_PER_BLOCK, shared_mem_size >> > (d_arr, N);
     cudaDeviceSynchronize();
 
-    // 2. Curățare cu Global Memory pentru elementele de la marginea blocurilor
     for (int step = 0; step < (N + 1) / 2; step++) {
         odd_even_sort_kernel << <blocks_global, THREADS_PER_BLOCK >> > (d_arr, N, 0);
         cudaDeviceSynchronize();

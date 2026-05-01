@@ -11,7 +11,7 @@
 
 #define THREADS_PER_BLOCK 256
 
-// --- HOST ---
+
 double runMergeSortHost(int* arr, int N) {
     auto start = std::chrono::high_resolution_clock::now();
     std::vector<int> temp(N);
@@ -36,7 +36,7 @@ double runMergeSortHost(int* arr, int N) {
     return std::chrono::duration<double>(end - start).count();
 }
 
-// --- GLOBAL ---
+
 __global__ void merge_sort_kernel(int* arr, int* temp, int n, int width) {
     int i = (blockIdx.x * blockDim.x + threadIdx.x) * 2 * width;
     if (i >= n) return;
@@ -60,6 +60,7 @@ __global__ void merge_sort_kernel(int* arr, int* temp, int n, int width) {
 
     for (int k = left; k < right; k++) arr[k] = temp[k];
 }
+
 
 double runMergeSortGlobal(int* h_arr, int N) {
     int* d_arr, * d_temp;
@@ -86,9 +87,10 @@ double runMergeSortGlobal(int* h_arr, int N) {
     return std::chrono::duration<double>(end - start).count();
 }
 
-// --- SHARED ---
+
 __global__ void merge_sort_shared(int* arr, int N) {
     extern __shared__ int s_arr[];
+    __shared__ int s_temp[256];
     int tid = threadIdx.x;
     int gid = blockIdx.x * blockDim.x + tid;
 
@@ -97,30 +99,28 @@ __global__ void merge_sort_shared(int* arr, int N) {
     __syncthreads();
 
     for (int width = 1; width < blockDim.x; width *= 2) {
-        int l = tid;
-        if (l % (2 * width) == 0) {
-            int mid = l + width;
-            if (mid > blockDim.x) mid = blockDim.x;
-            int right = l + 2 * width;
-            if (right > blockDim.x) right = blockDim.x;
+        s_temp[tid] = s_arr[tid];
+        __syncthreads();
 
-            int i = l, j = mid;
-            while (i < j && j < right) {
-                if (s_arr[i] <= s_arr[j]) {
-                    i++;
-                }
-                else {
-                    int val = s_arr[j];
-                    for (int k = j; k > i; k--) s_arr[k] = s_arr[k - 1];
-                    s_arr[i] = val;
-                    i++; j++;
-                }
+        if (tid % (2 * width) == 0) {
+            int left = tid;
+            int mid = min(tid + width, blockDim.x);
+            int right = min(tid + 2 * width, blockDim.x);
+
+            int l = left, r = mid, idx = left;
+            while (l < mid && r < right) {
+                if (s_temp[l] <= s_temp[r]) s_arr[idx++] = s_temp[l++];
+                else                         s_arr[idx++] = s_temp[r++];
             }
+            while (l < mid)   s_arr[idx++] = s_temp[l++];
+            while (r < right) s_arr[idx++] = s_temp[r++];
         }
         __syncthreads();
     }
+
     if (gid < N) arr[gid] = s_arr[tid];
 }
+
 
 double runMergeSortShared(int* h_arr, int N) {
     int* d_arr, * d_temp;
@@ -134,11 +134,9 @@ double runMergeSortShared(int* h_arr, int N) {
 
     auto start = std::chrono::high_resolution_clock::now();
 
-    // 1. Faza Shared: Sortare intervale de dimensiunea blocului
     merge_sort_shared << <blocks, THREADS_PER_BLOCK, shared_mem_size >> > (d_arr, N);
     cudaDeviceSynchronize();
 
-    // 2. Faza Global?: Continuare Reducere Binar? pentru l??imi mai mari
     for (int width = THREADS_PER_BLOCK; width < N; width *= 2) {
         int num_merges = (N + (2 * width) - 1) / (2 * width);
         int current_blocks = (num_merges + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;

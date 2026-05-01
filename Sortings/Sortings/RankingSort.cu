@@ -10,7 +10,7 @@
 
 #define THREADS_PER_BLOCK 256
 
-// --- HOST ---
+
 double runRankingSortHost(int* arr, int N) {
     auto start = std::chrono::high_resolution_clock::now();
     std::vector<int> out_arr(N);
@@ -29,7 +29,7 @@ double runRankingSortHost(int* arr, int N) {
     return std::chrono::duration<double>(end - start).count();
 }
 
-// --- GLOBAL ---
+
 __global__ void ranking_sort_kernel(int* in_arr, int* out_arr, int n) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < n) {
@@ -43,6 +43,7 @@ __global__ void ranking_sort_kernel(int* in_arr, int* out_arr, int n) {
         out_arr[final_position] = my_val;
     }
 }
+
 
 double runRankingSortGlobal(int* h_arr, int N) {
     int* d_in, * d_out;
@@ -64,7 +65,7 @@ double runRankingSortGlobal(int* h_arr, int N) {
     return std::chrono::duration<double>(end - start).count();
 }
 
-// --- SHARED ---
+
 __global__ void ranking_sort_shared(int* in_arr, int* out_arr, int n) {
     extern __shared__ int s_tile[];
     int tid = threadIdx.x;
@@ -97,6 +98,7 @@ __global__ void ranking_sort_shared(int* in_arr, int* out_arr, int n) {
 
     if (gid < n) out_arr[final_position] = my_val;
 }
+
 
 double runRankingSortShared(int* h_arr, int N) {
     int* d_in, * d_out;

@@ -13,27 +13,21 @@ bool isSorted(const std::vector<int>& arr) {
 void printAdvancedMetrics(const std::string& algoName, double hostTime, double gpuTime, int N, int num_processors) {
     std::cout << "[" << algoName << "]\n";
 
-    // 1. Timpii de Execuție (în milisecunde)
     std::cout << "  Host Time:     " << std::fixed << std::setprecision(3) << hostTime * 1000.0 << " ms\n";
     std::cout << "  GPU Time:      " << gpuTime * 1000.0 << " ms\n";
 
-    // 2. Speedup și Eficiență
     std::cout << "  Speedup:       " << speedup(hostTime, gpuTime) << "x\n";
     std::cout << "  Efficiency:    " << efficiency(hostTime, gpuTime, num_processors) * 100.0 << " %\n";
 
-    // 3. Cost (Computations = P * Tp)
     std::cout << "  Cost (Comp):   " << cost(gpuTime, num_processors) << " sec. (Timp global consumat de " << num_processors << " cores)\n";
 
-    // 4. Overhead (P * Tp - T1)
     std::cout << "  Overhead:      " << overhead(hostTime, gpuTime, num_processors) << " sec.\n";
 
-    // 5. Throughput (Tasks / Time) -> Elemente sortate pe secundă
     std::cout << "  Throughput:    " << throughput(N, gpuTime) / 1e6 << " Milioane elemente/sec\n";
 
-    // 6. Communication Time (Simulat folosind PCI-Express 3.0 x16)
-    double latency = 10e-6; // 10 microsecunde latență PCI
-    double bandwidthCost = 1.0 / (15.75 * 1024 * 1024 * 1024); // Secunde per byte
-    double messageSize = N * sizeof(int) * 2.0; // Dimensiunea pentru HostToDevice + DeviceToHost
+    double latency = 10e-6;
+    double bandwidthCost = 1.0 / (15.75 * 1024 * 1024 * 1024);
+    double messageSize = N * sizeof(int) * 2.0;
 
     double comm_time = communicationTime(latency, bandwidthCost, messageSize);
     std::cout << "  Est. Comm Time:" << comm_time * 1000.0 << " ms (Transfer date pe PCIe)\n";

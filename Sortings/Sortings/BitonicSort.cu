@@ -2,13 +2,11 @@
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
 #include <chrono>
-#include <utility> // Pentru std::swap
+#include <utility>
 
 #define THREADS_PER_BLOCK 256
 
-// ==========================================================
-// 1. VARIANTA HOST (CPU)
-// ==========================================================
+
 double runBitonicSortHost(int* arr, int N) {
     auto start = std::chrono::high_resolution_clock::now();
 
@@ -29,9 +27,7 @@ double runBitonicSortHost(int* arr, int N) {
     return std::chrono::duration<double>(end - start).count();
 }
 
-// ==========================================================
-// 2. VARIANTA GLOBAL MEMORY (GPU)
-// ==========================================================
+
 __global__ void bitonic_sort_kernel(int* dev_values, int j, int k, int N) {
     unsigned int i, ixj;
     i = threadIdx.x + blockDim.x * blockIdx.x;
@@ -58,6 +54,7 @@ __global__ void bitonic_sort_kernel(int* dev_values, int j, int k, int N) {
     }
 }
 
+
 double runBitonicSortGlobal(int* h_arr, int N) {
     int* d_arr;
     size_t size = N * sizeof(int);
@@ -83,13 +80,11 @@ double runBitonicSortGlobal(int* h_arr, int N) {
     return duration.count();
 }
 
-// ==========================================================
-// 3. VARIANTA SHARED MEMORY (GPU Hibrid)
-// ==========================================================
+
 __global__ void bitonic_sort_shared(int* arr, int N) {
     extern __shared__ int s_data[];
     int tid = threadIdx.x;
-    int gid = blockIdx.x * blockDim.x + threadIdx.x;
+    int gid = blockIdx.x * blockDim.x + tid;
 
     if (gid < N) s_data[tid] = arr[gid];
     else s_data[tid] = INT_MAX;
@@ -99,15 +94,17 @@ __global__ void bitonic_sort_shared(int* arr, int N) {
         for (int j = k / 2; j > 0; j /= 2) {
             int ixj = tid ^ j;
             if (ixj > tid) {
-                int val_tid = s_data[tid];
-                int val_ixj = s_data[ixj];
-
-                // REZOLVARE AICI: Folosim 'gid' în loc de 'tid'
-                if ((gid & k) == 0) {
-                    if (val_tid > val_ixj) { s_data[tid] = val_ixj; s_data[ixj] = val_tid; }
+                int global_group = gid / k;
+                bool ascending = (global_group % 2 == 0);
+                if (ascending) {
+                    if (s_data[tid] > s_data[ixj]) {
+                        int tmp = s_data[tid]; s_data[tid] = s_data[ixj]; s_data[ixj] = tmp;
+                    }
                 }
                 else {
-                    if (val_tid < val_ixj) { s_data[tid] = val_ixj; s_data[ixj] = val_tid; }
+                    if (s_data[tid] < s_data[ixj]) {
+                        int tmp = s_data[tid]; s_data[tid] = s_data[ixj]; s_data[ixj] = tmp;
+                    }
                 }
             }
             __syncthreads();
@@ -116,6 +113,7 @@ __global__ void bitonic_sort_shared(int* arr, int N) {
     if (gid < N) arr[gid] = s_data[tid];
 }
 
+
 double runBitonicSortShared(int* h_arr, int N) {
     int* d_arr;
     size_t size = N * sizeof(int);
@@ -123,15 +121,13 @@ double runBitonicSortShared(int* h_arr, int N) {
     cudaMemcpy(d_arr, h_arr, size, cudaMemcpyHostToDevice);
 
     int blocks = (N + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
-    size_t shared_mem_size = THREADS_PER_BLOCK * sizeof(int); // Calcul?m octe?ii necesari
+    size_t shared_mem_size = THREADS_PER_BLOCK * sizeof(int);
 
     auto start = std::chrono::high_resolution_clock::now();
 
-    // Faza 1: Sortare rapid? pe nivel de bloc în SHARED MEMORY
     bitonic_sort_shared << <blocks, THREADS_PER_BLOCK, shared_mem_size >> > (d_arr, N);
     cudaDeviceSynchronize();
 
-    // Faza 2: Continuarea interclas?rilor mari în GLOBAL MEMORY (k > THREADS_PER_BLOCK)
     for (int k = THREADS_PER_BLOCK * 2; k <= N; k <<= 1) {
         for (int j = k >> 1; j > 0; j = j >> 1) {
             bitonic_sort_kernel << <blocks, THREADS_PER_BLOCK >> > (d_arr, j, k, N);

@@ -10,9 +10,7 @@
 
 #define THREADS_PER_BLOCK 256
 
-// ==========================================================
-// --- 1. HOST ---
-// ==========================================================
+
 double runShellSortHost(int* arr, int N) {
     auto start = std::chrono::high_resolution_clock::now();
     for (int gap = N / 2; gap > 0; gap /= 2) {
@@ -30,13 +28,9 @@ double runShellSortHost(int* arr, int N) {
 }
 
 
-// ==========================================================
-// --- 2. GLOBAL ---
-// ==========================================================
 __global__ void shell_sort_kernel(int* arr, int n, int gap, int phase, bool* changed) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
 
-    // Faza Par? / Impar? pentru a preveni coliziunea datelor (Race Conditions)
     if (i + gap < n && (i / gap) % 2 == phase) {
         if (arr[i] > arr[i + gap]) {
             int temp = arr[i];
@@ -46,6 +40,7 @@ __global__ void shell_sort_kernel(int* arr, int n, int gap, int phase, bool* cha
         }
     }
 }
+
 
 double runShellSortGlobal(int* h_arr, int N) {
     int* d_arr;
@@ -82,12 +77,9 @@ double runShellSortGlobal(int* h_arr, int N) {
 }
 
 
-// ==========================================================
-// --- 3. SHARED ---
-// ==========================================================
 __global__ void shell_sort_shared(int* arr, int n) {
     extern __shared__ int s_arr[];
-    __shared__ bool s_changed; // Variabil? sigur? partajat? pentru a verifica dac? s-a f?cut vreun swap
+    __shared__ bool s_changed;
 
     int tid = threadIdx.x;
     int gid = blockIdx.x * blockDim.x + tid;
@@ -96,14 +88,12 @@ __global__ void shell_sort_shared(int* arr, int n) {
     else s_arr[tid] = INT_MAX;
     __syncthreads();
 
-    // Sorteaz? blocul local ca ?i cum ar fi propriul s?u array
     for (int gap = blockDim.x / 2; gap > 0; gap /= 2) {
         do {
             __syncthreads();
             if (tid == 0) s_changed = false;
             __syncthreads();
 
-            // Faza Par? local?
             if (tid + gap < blockDim.x && (tid / gap) % 2 == 0) {
                 if (s_arr[tid] > s_arr[tid + gap]) {
                     int temp = s_arr[tid]; s_arr[tid] = s_arr[tid + gap]; s_arr[tid + gap] = temp;
@@ -112,7 +102,6 @@ __global__ void shell_sort_shared(int* arr, int n) {
             }
             __syncthreads();
 
-            // Faza Impar? local?
             if (tid + gap < blockDim.x && (tid / gap) % 2 != 0) {
                 if (s_arr[tid] > s_arr[tid + gap]) {
                     int temp = s_arr[tid]; s_arr[tid] = s_arr[tid + gap]; s_arr[tid + gap] = temp;
@@ -127,6 +116,7 @@ __global__ void shell_sort_shared(int* arr, int n) {
     if (gid < n) arr[gid] = s_arr[tid];
 }
 
+
 double runShellSortShared(int* h_arr, int N) {
     int* d_arr;
     bool* d_changed, h_changed;
@@ -140,12 +130,9 @@ double runShellSortShared(int* h_arr, int N) {
 
     auto start = std::chrono::high_resolution_clock::now();
 
-    // PASUL 1: Pre-sortare ultra-rapid? local? în Shared Memory
     shell_sort_shared << <blocks, THREADS_PER_BLOCK, shared_mem_size >> > (d_arr, N);
     cudaDeviceSynchronize();
 
-    // PASUL 2: Ciclul Global clasic pentru a rezolva grani?ele dintre blocuri
-    // (Va rula foarte rapid deoarece vectorul e deja 99% sortat de pasul anterior)
     for (int gap = N / 2; gap > 0; gap /= 2) {
         int current_blocks = ((N - gap) + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
         if (current_blocks == 0) current_blocks = 1;
